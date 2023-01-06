@@ -9,6 +9,88 @@
 # 评价指标
 import pandas as pd
 from tensorflow import metrics
+import tensorflow as tf
+from tensorflow.keras import initializers, constraints
+from tensorflow.python.keras import regularizers
+from tensorflow.python.keras import backend as K
+from tensorflow.python.keras.layers import *
+
+
+class Attention(Layer):
+    def __init__(self, step_dim,
+                 W_regularizer=None, b_regularizer=None,
+                 W_constraint=None, b_constraint=None,
+                 bias=True, **kwargs):
+        self.supports_masking = True
+        self.init = initializers.get('glorot_uniform')
+
+        self.W_regularizer = regularizers.get(W_regularizer)
+        self.b_regularizer = regularizers.get(b_regularizer)
+
+        self.W_constraint = constraints.get(W_constraint)
+        self.b_constraint = constraints.get(b_constraint)
+
+        self.bias = bias
+        self.step_dim = step_dim
+        self.features_dim = 0
+
+        super(Attention, self).__init__(**kwargs)
+
+    def build(self, input_shape):
+        assert len(input_shape) == 3
+
+        self.W = self.add_weight(shape=(input_shape[-1],),
+                                 initializer=self.init,
+                                 name='{}_W'.format(self.name),
+                                 regularizer=self.W_regularizer,
+                                 constraint=self.W_constraint)
+        self.features_dim = input_shape[-1]
+
+        if self.bias:
+            self.b = self.add_weight(shape=(input_shape[1],),
+                                     initializer='zero',
+                                     name='{}_b'.format(self.name),
+                                     regularizer=self.b_regularizer,
+                                     constraint=self.b_constraint)
+        else:
+            self.b = None
+
+        self.built = True
+
+    def compute_mask(self, input, input_mask=None):
+        # do not pass the mask to the next layers
+        return None
+
+    def call(self, x, mask=None):
+        features_dim = self.features_dim
+        step_dim = self.step_dim
+
+        e = K.reshape(K.dot(K.reshape(x, (-1, features_dim)), K.reshape(self.W, (features_dim, 1))),
+                      (-1, step_dim))  # e = K.dot(x, self.W)
+        if self.bias:
+            e += self.b
+        e = K.tanh(e)
+
+        a = K.exp(e)
+
+        if mask is not None:
+            a *= K.cast(mask, K.floatx())
+
+        a /= K.cast(K.sum(a, axis=1, keepdims=True) + K.epsilon(), K.floatx())
+        a = K.expand_dims(a)
+
+        c = K.sum(a * x, axis=1)
+        return c
+
+    def compute_output_shape(self, input_shape):
+        return input_shape[0], self.features_dim
+
+    def get_config(self):  # 在有自定义网络层时，需要保存模型时，重写get_config函数
+        config = {"step_dim": self.step_dim, "W_regularizer": self.W_regularizer, "b_regularizer": self.b_regularizer,
+                  "W_constraint": self.W_constraint, "b_constraint": self.b_constraint, "bias": self.bias}
+
+        base_config = super(Attention, self).get_config()
+        return dict(list(base_config.items()) + list(config.items()))
 
 
 def tolerance_metrics(y_true, y_pre):
@@ -74,3 +156,9 @@ def tolerance_metrics(y_true, y_pre):
 # 转换成标签
 def zero_or_one(x):
     return 1 if x > 0.5 else 0
+
+
+model = tf.keras.models.load_model('../model/model_DeepTP.h5',custom_objects={'Attention': Attention})
+
+# Show the model architecture
+model.summary()
