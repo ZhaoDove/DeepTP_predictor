@@ -117,7 +117,7 @@ def trans(str12):
 
 
 def Encoding(test):
-    test['encode'] = test['seq'].apply(lambda x: trans(x))
+    test['encode'] = test['Sequence'].apply(lambda x: trans(x))
     return test
 
 
@@ -132,7 +132,7 @@ def trans_6(str1):
 
 
 def Encoding_6(test):
-    test['encode1'] = test['seq'].apply(lambda x: trans_6(x))
+    test['encode1'] = test['Sequence'].apply(lambda x: trans_6(x))
     return test
 
 
@@ -219,7 +219,7 @@ def train():
         f.close()
     train_data = pd.read_csv(fea_csv_path, index_col=0)
 
-    train_features = train_data.drop(['UniProt_id', 'temp', 'seq'], axis=1).select_dtypes(exclude=['object'])
+    train_features = train_data.drop(['UniProt_id', 'Type', 'Sequence'], axis=1).select_dtypes(exclude=['object'])
     train_features = train_features.values
     train_features_rbs = rbs.fit_transform(train_features)
     model_file_name = "../feature_selection/selector_RFECV_205.pickle"
@@ -228,7 +228,7 @@ def train():
     support = get_model.get_support(True)
     x_bio_train = train_features_rbs[:, support]
 
-    train_y = train_data["temp"]
+    train_y = train_data["Type"]
     train_y = train_y.values
 
     max_length = 1500
